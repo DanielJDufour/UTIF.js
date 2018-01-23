@@ -16,9 +16,16 @@ function log() { if (typeof process=="undefined" || process.env.NODE_ENV=="devel
 
 UTIF.encodeImage = function(rgba, w, h, metadata)
 {
-	var idf = { "t256":[w], "t257":[h], "t258":[8,8,8,8], "t259":[1], "t262":[2], "t273":[1000], // strips offset
+	var idf = { "t256":[w], "t257":[h], "t258":[8,8,8,8], "t259":[1], "t262":[2],
+				"t273":[2000], // strips offset
 				"t277":[4], "t278":[h], /* rows per strip */          "t279":[w*h*4], // strip byte counts
-				"t282":[1], "t283":[1], "t284":[1], "t286":[0], "t287":[0], "t296":[1], "t305": ["Photopea (UTIF.js)"], "t338":[1]
+				
+				//"t282":[1],
+				//"t283":[1],
+				"t284":[1], "t286":[0], "t287":[0],
+				//"t296":[1],
+				//"t305": ["Photopea (UTIF.js)"],
+				"t338":[1]
 		};
 	if (metadata) {
 		for (var i in metadata) {
@@ -26,10 +33,11 @@ UTIF.encodeImage = function(rgba, w, h, metadata)
 		}
 	}
 	var prfx = new Uint8Array(UTIF.encode([idf]));
+	//console.log("prfx:", prfx);
 	var img = new Uint8Array(rgba);
-	var data = new Uint8Array(1000+w*h*4);
+	var data = new Uint8Array(2000+w*h*4);
 	for(var i=0; i<prfx.length; i++) data[i] = prfx[i];
-	for(var i=0; i<img .length; i++) data[1000+i] = img[i];
+	for(var i=0; i<img .length; i++) data[2000+i] = img[i];
 	return data.buffer;
 }
 
@@ -40,12 +48,15 @@ UTIF.encode = function(ifds)
 
 	var ifdo = 8;
 	bin.writeUint(data, offset, ifdo);  offset+=4;
+	//console.log("ifds.length:", ifds.length);
 	for(var i=0; i<ifds.length; i++)
 	{
 		var noffs = UTIF._writeIFD(bin, data, ifdo, ifds[i]);
 		ifdo = noffs[1];
+		console.log("ifds:", ifds);
 		if(i<ifds.length-1) bin.writeUint(data, noffs[0], ifdo);
 	}
+	//console.log("encoding returning");
 	return data.slice(0, ifdo).buffer;
 }
 //UTIF.encode._writeIFD
@@ -173,10 +184,10 @@ UTIF.decode._decodeNikon = function(data, off, len, tgt, toff)
 	var ver0, ver1, vpred, hpred, csize;
 	var i, min, max, step=0, huff=0, split=0, row, col, len, shl, diff;
 	
-	console.log(data.slice(off,off+100));
+	//console.log(data.slice(off,off+100));
 	ver0 = data[off];  off++;
 	ver1 = data[off];  off++;
-	console.log(ver0.toString(16), ver1.toString(16), len);
+	//console.log(ver0.toString(16), ver1.toString(16), len);
 }
 
 UTIF.decode._decodeNewJPEG = function(img, data, off, len, tgt, toff)
@@ -474,7 +485,39 @@ UTIF.tags = {254:"NewSubfileType",255:"SubfileType",256:"ImageWidth",257:"ImageL
 			 51008:"OpcodeList1",51009:"OpcodeList2",51022:"OpcodeList3",51041:"NoiseProfile",51089:"OriginalDefaultFinalSize",
 			 51090:"OriginalBestQualityFinalSize",51091:"OriginalDefaultCropSize",51125:"DefaultUserCrop"};
 
-UTIF.ttypes = {  256:3,257:3,258:3,   259:3, 262:3,  273:4,  274:3, 277:3,278:4,279:4, 282:5, 283:5, 284:3, 286:5,287:5, 296:3, 305:2, 306:2, 338:3, 513:4, 514:4, 34665:4  };
+UTIF.ttypes = {
+	256:3,
+	257:3,
+	258:3,
+	259:3,
+	262:3,
+	273:4,
+	274:3,
+	277:3,
+	278:4,
+	279:4,
+	282:5,
+	283:5,
+	284:3,
+	286:3,
+	287:5,
+	296:3,
+	305:2,
+	306:2,
+	338:3,
+	339:3,
+	513:4,
+	514:4,
+	1024:3,
+	1025:3,
+	2048:3,
+	2049:2,
+	33550:5,//model pixel scale
+	33922: 5,// this one too
+	34665:4,
+	34735:3,
+	34737:2
+};
 
 UTIF._readIFD = function(bin, data, offset, ifds)
 {
@@ -512,6 +555,7 @@ UTIF._readIFD = function(bin, data, offset, ifds)
 UTIF._writeIFD = function(bin, data, offset, ifd)
 {
 	var keys = Object.keys(ifd);
+	//console.log("keys:", keys);
 	bin.writeUshort(data, offset, keys.length);  offset+=2;
 
 	var eoff = offset + keys.length*12 + 4;
@@ -519,7 +563,10 @@ UTIF._writeIFD = function(bin, data, offset, ifd)
 	for(var ki=0; ki<keys.length; ki++) {
 		var key = keys[ki];
 		var tag = parseInt(key.slice(1)), type = UTIF.ttypes[tag];  if(type==null) throw "unknown type of tag: "+tag;
-		var val = ifd[key];  if(type==2) val=val[0]+"\u0000";  var num = val.length;
+		var val = ifd[key];
+		//console.log("val:", val);
+		if(type==2) val=val[0]+"\u0000";
+		var num = val.length;
 		bin.writeUshort(data, offset, tag );  offset+=2;
 		bin.writeUshort(data, offset, type);  offset+=2;
 		bin.writeUint  (data, offset, num );  offset+=4;
